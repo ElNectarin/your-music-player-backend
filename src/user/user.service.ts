@@ -56,7 +56,19 @@ export class UserService {
   }
 
   async findAllUsers(): Promise<User[]> {
-    return await this.userModel.findAll();
+    try {
+      const foundedUsers = await this.userModel.findAll();
+      if (!foundedUsers) {
+        throw new BadRequestException('Не удалось найти пользователей');
+      }
+      return foundedUsers;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('Ошибка при поиске пользователей:', error);
+      throw new InternalServerErrorException('Не удалось найти пользователей');
+    }
   }
 
   async findOneUser(id: number): Promise<User> {
