@@ -5,5 +5,5 @@ export class CreateUserDto {
   password!: string;
   profilePhoto?: string;
   bio?: string;
-  userName?: string;
+  userName!: string;
 }

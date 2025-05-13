@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   InternalServerErrorException,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User } from './entities/user.entity';
@@ -17,6 +18,25 @@ export class UserService {
     @InjectModel(User)
     private userModel: typeof User,
   ) {}
+
+  private async handleUserSearch(
+    searchPromise: Promise<User | null>,
+    notFoundMessage: string,
+  ): Promise<User> {
+    try {
+      const foundedUser = await searchPromise;
+      if (!foundedUser) {
+        throw new BadRequestException(notFoundMessage);
+      }
+      return foundedUser;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      console.error('Ошибка при поиске пользователя:', error);
+      throw new InternalServerErrorException('Не удалось найти пользователя');
+    }
+  }
 
   async createUser(createUserDto: Partial<CreateUserDto>): Promise<User> {
     try {
@@ -33,6 +53,10 @@ export class UserService {
       }
       if (!createUserDto.password) {
         throw new BadRequestException('Пароль обязателен!');
+      }
+
+      if (!createUserDto.userName) {
+        throw new BadRequestException('Юзернейм обязателен!');
       }
 
       const saltRounds = parseInt(process.env.HASH_CRYPT || '10');
@@ -72,26 +96,40 @@ export class UserService {
   }
 
   async findOneUser(id: number): Promise<User> {
-    try {
-      const foundedUser = await this.userModel.findByPk(id);
-      if (!foundedUser) {
-        throw new BadRequestException('Не удалось найти пользователя');
-      }
-      return foundedUser;
-    } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      console.error('Ошибка при поиске пользователя:', error);
-      throw new InternalServerErrorException('Не удалось найти пользователя');
-    }
+    return this.handleUserSearch(
+      this.userModel.findByPk(id),
+      'Не удалось найти пользователя по id',
+    );
+  }
+
+  async findOneUserByUsername(userName: string): Promise<User> {
+    return this.handleUserSearch(
+      this.userModel.findOne({
+        where: {
+          userName: userName,
+        },
+      }),
+      'Не удалось найти пользователя по юзернейм',
+    );
   }
 
   // update(id: number, updateUserDto: UpdateUserDto) {
   //   return `This action updates a #${id} user`;
   // }
 
-  async removeUser(id: number) {
-    return this.userModel.destroy({ where: { id } });
+  async removeUser(id: number): Promise<number> {
+    try {
+      const deletedCount = await this.userModel.destroy({ where: { id } });
+      if (deletedCount === 0) {
+        throw new NotFoundException('Пользователь не найден');
+      }
+      return deletedCount;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Ошибка при удалении пользователя');
+      throw new InternalServerErrorException('Не удалось удалить пользователя');
+    }
   }
 }
